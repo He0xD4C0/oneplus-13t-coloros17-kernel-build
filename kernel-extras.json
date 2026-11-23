@@ -5,6 +5,7 @@
       "CONFIG_KPM=y"
     ],
     "container": [
+      "CONFIG_SYSVIPC=y",
       "CONFIG_CGROUP_DEVICE=y",
       "CONFIG_CGROUP_PIDS=y",
       "CONFIG_CGROUP_MISC=y",
@@ -20,6 +21,8 @@
       "CONFIG_IP6_NF_NAT=y",
       "CONFIG_IP6_NF_TARGET_MASQUERADE=y",
       "CONFIG_NF_TABLES=y",
+      "CONFIG_NF_TABLES_IPV6=y",
+      "CONFIG_NF_TABLES_IPV4=y",
       "CONFIG_NFT_CT=y",
       "CONFIG_NFT_NAT=y",
       "CONFIG_NFT_MASQ=y",
