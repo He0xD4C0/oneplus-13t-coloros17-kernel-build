@@ -105,6 +105,12 @@ Kleaf 的 `check_defconfig` 要求 `gki_defconfig` 与 `savedefconfig` 的规范
 这一点在 run 45098110397 上暴露过：当时选项其实全部生效（重建配置里能看到 `CONFIG_KPM`、
 `CGROUP_DEVICE`、`NFT_*`），只是文件布局不被接受。
 
+连同 `USER_NS` 一起打开时，内核会新导出 `from_kuid` / `from_kuid_munged`，触发 Kleaf 的
+KMI 白名单校验（它假定受保护导出只对已签名模块可见）。本构建的 `MODULE_SIG_PROTECT` 是关闭的，
+这些导出对未签名模块同样可见，因此只在选定配置组时给官方构建入口追加
+`EXTRA_KBUILD_ARGS="--nokmi_symbol_list_violations_check"`（run 45100799685 就是被这条挡住的，
+编译本身跑完了 1h38m）。
+
 ## KVM 与容器的实测结论
 
 - **KVM 在本机不可用，且不是配置问题**。`gki_defconfig` 里 `CONFIG_KVM=y`，内核已编入；但设备上

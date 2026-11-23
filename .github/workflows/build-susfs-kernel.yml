@@ -121,6 +121,13 @@ jobs:
           cd "$TREE_ROOT"
           export PATH="$PWD/kernel_platform/prebuilts/build-tools/path/linux-x86:$PATH"
           export RECOMPILE_EXT_MODULE=0
+          # 启用容器组后 USER_NS 会新导出 from_kuid/from_kuid_munged，触发 KMI 白名单校验
+          # （它假定受保护导出只对签名模块可见）。本构建已关闭 MODULE_SIG_PROTECT，
+          # 这些导出对未签名模块同样可见，故只在注入配置组时关掉该校验。
+          if [ "$KERNEL_EXTRAS" != "none" ] && [ -n "$KERNEL_EXTRAS" ]; then
+            export EXTRA_KBUILD_ARGS="${EXTRA_KBUILD_ARGS:-} --nokmi_symbol_list_violations_check"
+            echo "EXTRA_KBUILD_ARGS=$EXTRA_KBUILD_ARGS"
+          fi
           mkdir -p out/target/product/sun
           bash kernel_platform/oplus/build/oplus_build_kernel.sh sun perf 2>&1 | tee /mnt/work/build.log
           # 官方脚本即使 Bazel 失败也可能返回 0，必须显式核对 dist 产物。
