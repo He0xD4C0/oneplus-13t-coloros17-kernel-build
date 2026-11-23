@@ -9,6 +9,12 @@ on:
         default: 'false'
         type: choice
         options: ['false', 'true']
+      kernel_extras:
+        description: '额外内核配置组（kpm=SukiSU KPM；container=命名空间/cgroup/overlay/nftables）'
+        required: true
+        default: none
+        type: choice
+        options: ['none', 'kpm', 'container', 'kpm,container']
 
 permissions:
   contents: read
@@ -60,6 +66,7 @@ jobs:
       ARCH_DIR: /mnt/work/archives
       SOURCE_DATE_EPOCH: '1789450538'
       PYTHONUTF8: '1'
+      KERNEL_EXTRAS: ${{ inputs.kernel_extras }}
     steps:
       - name: 检出同一固定提交
         uses: actions/checkout@v7.0.1
@@ -93,6 +100,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 ci-install-susfs.py 2>&1 | tee /mnt/work/susfs-install.log
+
+      - name: 注入选定配置组（none 时不动 defconfig）
+        run: |
+          set -euo pipefail
+          python3 ci-install-extras.py 2>&1 | tee /mnt/work/config-extras.log
 
       - name: common 与 sun_perf 双配置门禁
         run: |
@@ -138,6 +150,8 @@ jobs:
             /mnt/work/config-msm-kernel.txt
             /mnt/work/assemble.log
             /mnt/work/susfs-install.log
+            /mnt/work/config-extras.log
+            /mnt/work/config-extras-report/
             /mnt/work/config.log
             /mnt/work/build.log
             /mnt/work/artifact-verification.log

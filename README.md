@@ -84,6 +84,31 @@ rfkill → cfg80211 → mac80211 → qca_cld3 整链加载失败（WiFi/蓝牙�
 手动触发 `build-native-susfs-kernel`，`skip_build=true` 只做装配与配置验证（约 15–25 分钟）。
 产物含 `boot.img`、`Image`、`System.map`、`SHA256SUMS.txt`、两份 `.config` 与全部构建/复验日志。
 
+## 配置组 `kernel_extras`
+
+在 `build-native-susfs-kernel` 的输入里可选 `none` / `kpm` / `container` / `kpm,container`，
+由 `kernel-extras.json` 定义、`ci-install-extras.py` 注入两棵树的 `arch/arm64/configs/gki_defconfig`，
+再由 `ci-check-susfs-config.py` 在最终 `.config` 上逐项核对；Kconfig 依赖不满足导致选项被静默丢弃时，
+构建在配置门禁阶段就失败，不会白跑编译。
+
+| 组 | 内容 |
+|---|---|
+| `kpm` | `CONFIG_KPM=y`。SukiSU 固定提交自带 `kernel/extension/kpm`，但其 Kconfig `default n`，不打开时设备上没有 KPM 接口；启用后可在管理器里加载 KPM 模块 |
+| `container` | `CGROUP_DEVICE`/`CGROUP_PIDS`/`CGROUP_MISC`、`USER_NS`/`PID_NS`/`IPC_NS`、`SQUASHFS(+LZ4/ZSTD)`、`MACVLAN`/`VXLAN`、`NF_TABLES`/`NFT_*`、`IP6_NF_NAT`、`BRIDGE_NETFILTER`。基线里 `PID_NS` 被显式关闭、`NF_TABLES` 未开，缺这些 runc/docker 不可用 |
+
+基线（`none`）与原来行为一致：开关为 `none` 时不改动任何 defconfig。
+注入是幂等的，重跑不会让 defconfig 增长或错位。
+
+## KVM 与容器的实测结论
+
+- **KVM 在本机不可用，且不是配置问题**。`gki_defconfig` 里 `CONFIG_KVM=y`，内核已编入；但设备上
+  `/dev/kvm` 不存在，`ro.boot.hypervisor.protected_vm.supported=true`，EL2 由高通 Gunyah/pKVM 占用
+  （源码里另有 `sun_tuivm.config` 佐证），内核运行在 EL1，无法再当 hypervisor 宿主。继续在配置上折腾没有意义。
+- **容器可行**，前提是打开 `container` 组：基线缺 `PID_NS`/`USER_NS`/`IPC_NS`/`CGROUP_DEVICE`，
+  `CGROUP_DEVICE` 缺失会让 runc 直接拒绝启动容器。`OVERLAY_FS`、`BINFMT_MISC`、`VETH`、`BRIDGE`、
+  `NF_NAT`、`TUN`、`SECCOMP` 基线已具备；`WIREGUARD` 也已 `=y`。
+- 4K 页内核意味着容器与宿主的页大小一致，无需 16K 兼容层。
+
 ## 已验证的结果
 
 ### 一、静态：构建与产物复验（run 39595181403，提交 `197ba2d`）
@@ -141,7 +166,7 @@ rfkill → cfg80211 → mac80211 → qca_cld3 整链加载失败（WiFi/蓝牙�
 5. 只刷 `boot`（`boot_a`/`boot_b` 对应当前槽位），**不要**顺带刷 vendor_boot、dtbo、super 或切换槽位。
 6. 禁用 dm-verity 后运行时完整性校验失效；`MODULE_SIG_PROTECT=n` 后 vendor 模块靠 vermagic 匹配加载。
 
-参考步骤（本仓库不提供脚本，需自行确认设备与槽位）：
+参考步骤（fastboot 路径，需自行确认设备与槽位）：
 
 ```bash
 fastboot --disable-verity --disable-verification flash vbmeta vbmeta_a.img   # 一次性，若尚未禁用
@@ -152,6 +177,29 @@ fastboot reboot
 刷后自查：`getprop sys.boot_completed`、`getprop ro.build.display.id`（应含 `PKX110_17.0.0.104(CN01)`）、
 `getprop ro.boot.slot_suffix`、`uname -r`、`su -c id`，并复算分区摘要与镜像一致。
 启动失败时只允许回刷本次备份的 boot。
+
+## 设备端刷写 `flash-boot.sh`
+
+不想接电脑时用这个脚本：**只用 su + dd 写当前槽位的 boot 分区，不做任何镜像重打包**
+（不改 ramdisk、dtb、header，也不是 AnyKernel3 那种 magiskboot 重打包路线）。
+
+```bash
+su -c 'sh flash-boot.sh status'                 # 当前槽位、分区大小、现有备份
+su -c 'sh flash-boot.sh flash boot.img'          # 先备份→写→回读校验
+su -c 'sh flash-boot.sh rollback'                # 回刷最近一次备份
+su -c 'sh flash-boot.sh backup'                  # 只备份，不写
+```
+
+行为约束：
+
+- 槽位取自 `ro.boot.slot_suffix`；读不到就用 `--slot a|b` 指定，绝不猜测。
+- 写入前要求首 8 字节为 `ANDROID!`（`rollback` 除外，回滚按原样恢复任意字节），
+  并要求镜像不大于分区；分区无备份时先自动备份，备份写完后立刻回读逐字节比对 SHA256。
+- 写入后 `sync` 并回读分区前 N 字节比对镜像 SHA256，不一致直接报错并提示回滚。
+- 备份落在 `/data/adb/boot-backups/boot<槽位>-<UTC时间>-<摘要前12位>.img`，旁边带 `.sha256` 与 `.json`；
+  `rollback` 会先核对 `.sha256` 再写，摘要不符拒绝回滚。
+- 目标不是块设备（例如普通文件）时默认拒绝，须显式 `--allow-file`，因此可以拿文件完整演练流程。
+- 不切槽、不写 vbmeta、不碰其它分区。
 
 ## 私钥与签名
 

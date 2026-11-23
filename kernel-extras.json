@@ -1,0 +1,34 @@
+{
+  "_comment": "可叠加的内核配置组。由 ci-install-extras.py 注入两棵树的 arch/arm64/configs/gki_defconfig，ci-check-susfs-config.py 逐项核对最终 .config。",
+  "groups": {
+    "kpm": [
+      "CONFIG_KPM=y"
+    ],
+    "container": [
+      "CONFIG_CGROUP_DEVICE=y",
+      "CONFIG_CGROUP_PIDS=y",
+      "CONFIG_CGROUP_MISC=y",
+      "CONFIG_USER_NS=y",
+      "CONFIG_PID_NS=y",
+      "CONFIG_IPC_NS=y",
+      "CONFIG_NET_CLS_CGROUP=y",
+      "CONFIG_SQUASHFS=y",
+      "CONFIG_SQUASHFS_LZ4=y",
+      "CONFIG_SQUASHFS_ZSTD=y",
+      "CONFIG_MACVLAN=y",
+      "CONFIG_VXLAN=y",
+      "CONFIG_IP6_NF_NAT=y",
+      "CONFIG_IP6_NF_TARGET_MASQUERADE=y",
+      "CONFIG_NF_TABLES=y",
+      "CONFIG_NFT_CT=y",
+      "CONFIG_NFT_NAT=y",
+      "CONFIG_NFT_MASQ=y",
+      "CONFIG_NFT_REDIRECT=y",
+      "CONFIG_NFT_CHAIN_NAT=y",
+      "CONFIG_NFT_COMPAT=y",
+      "CONFIG_BRIDGE_NETFILTER=y",
+      "CONFIG_NF_CONNTRACK_BRIDGE=y",
+      "CONFIG_BRIDGE_VLAN_FILTERING=y"
+    ]
+  }
+}
