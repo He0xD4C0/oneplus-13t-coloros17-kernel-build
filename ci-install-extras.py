@@ -54,6 +54,29 @@ def patch_defconfig_check(platform):
     print("已把 check_defconfig 的一致性校验降级为告警", flush=True)
 
 
+def patch_kmi_flag(platform):
+    """关闭 kmi_symbol_list_violations 校验（同 _setup_env.sh，仅在选定配置组时）。
+
+    该校验假定「受保护导出只对已签名模块可见」；本构建的 MODULE_SIG_PROTECT 是关闭的，
+    USER_NS 新导出的 from_kuid/from_kuid_munged 对未签名模块同样可用，运行时无风险。
+    改 build_setting_default 而不是传命令行参数：oplus 的构建入口不会把
+    EXTRA_KBUILD_ARGS 里的开关透传到 bazel（run 45111671207 实测），默认值改动对所有
+    调用路径都生效。
+    """
+    path = platform / "build/kernel/kleaf/BUILD.bazel"
+    if not path.is_file():
+        raise RuntimeError("缺少 Kleaf BUILD.bazel：" + str(path))
+    text = path.read_text(encoding="utf-8")
+    head = 'bool_flag(\n    name = "kmi_symbol_list_violations_check",\n    build_setting_default = True,'
+    if head not in text:
+        if 'name = "kmi_symbol_list_violations_check",\n    build_setting_default = False,' in text:
+            print("kmi 校验已是关闭状态，跳过", flush=True)
+            return
+        raise RuntimeError("kmi_symbol_list_violations_check 的 bool_flag 结构与预期不符，拒绝盲改")
+    path.write_text(text.replace(head, head.replace("build_setting_default = True", "build_setting_default = False")), encoding="utf-8")
+    print("已关闭 kmi_symbol_list_violations 校验", flush=True)
+
+
 def main():
     groups_all = json.loads((HERE / "kernel-extras.json").read_text(encoding="utf-8"))["groups"]
     raw = os.environ.get("KERNEL_EXTRAS", "").strip()
@@ -99,7 +122,9 @@ def main():
         (report / (tree_name + "-gki_defconfig")).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
         print("已注入配置组 %s → %s（%d 项）" % (",".join(groups), tree_name, len(symbols)), flush=True)
 
-    patch_defconfig_check(root / "kernel_platform")
+    platform = root / "kernel_platform"
+    patch_defconfig_check(platform)
+    patch_kmi_flag(platform)
 
 
 if __name__ == "__main__":

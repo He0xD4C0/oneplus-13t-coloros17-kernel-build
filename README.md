@@ -107,9 +107,10 @@ Kleaf 的 `check_defconfig` 要求 `gki_defconfig` 与 `savedefconfig` 的规范
 
 连同 `USER_NS` 一起打开时，内核会新导出 `from_kuid` / `from_kuid_munged`，触发 Kleaf 的
 KMI 白名单校验（它假定受保护导出只对已签名模块可见）。本构建的 `MODULE_SIG_PROTECT` 是关闭的，
-这些导出对未签名模块同样可见，因此只在选定配置组时给官方构建入口追加
-`EXTRA_KBUILD_ARGS="--nokmi_symbol_list_violations_check"`（run 45100799685 就是被这条挡住的，
-编译本身跑完了 1h38m）。
+这些导出对未签名模块同样可见，因此只在选定配置组时把该校验的 `bool_flag` 默认值改成 `False`
+（`kernel_platform/build/kernel/kleaf/BUILD.bazel`）。不传命令行开关的原因：oplus 的构建入口
+不透传 `EXTRA_KBUILD_ARGS` 里的 `--nokmi_symbol_list_violations_check`（run 45111671207 实测无效）。
+run 45100799685 就是被这条挡住的，编译本身跑完了 1h38m。
 
 ## KVM 与容器的实测结论
 
