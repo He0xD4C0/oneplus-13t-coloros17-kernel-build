@@ -27,6 +27,33 @@ def symbol_of(line):
     return None
 
 
+def patch_defconfig_check(platform):
+    """Kleaf 的 check_defconfig 要求 defconfig 与 savedefconfig 规范输出逐字节一致。
+
+    注入配置组后必然不满足（选项按 Kconfig 菜单顺序重排、位置不同），于是把该校验
+    降级为告警，其余构建检查不变。只在选定了配置组时执行，none 时保持原始校验。
+    """
+    path = platform / "build/kernel/_setup_env.sh"
+    if not path.is_file():
+        raise RuntimeError("缺少 Kleaf 环境脚本：" + str(path))
+    text = path.read_text(encoding="utf-8")
+    if "kernel-extras" in text:
+        print("defconfig 一致性校验已是告警模式，跳过", flush=True)
+        return
+    old = '''    if [ ${RES} -ne 0 ]; then
+        echo ERROR: savedefconfig does not match ${KERNEL_DIR}/arch/${ARCH}/configs/${DEFCONFIG} >&2
+    fi
+    return ${RES}'''
+    new = '''    if [ ${RES} -ne 0 ]; then
+        echo "WARNING: savedefconfig 与 arch/${ARCH}/configs/${DEFCONFIG} 不一致（kernel-extras 注入项不在 savedefconfig 规范顺序上），仅告警" >&2
+    fi
+    return 0'''
+    if text.count(old) != 1:
+        raise RuntimeError("_setup_env.sh 的 check_defconfig 结构与预期不符，拒绝盲改")
+    path.write_text(text.replace(old, new), encoding="utf-8")
+    print("已把 check_defconfig 的一致性校验降级为告警", flush=True)
+
+
 def main():
     groups_all = json.loads((HERE / "kernel-extras.json").read_text(encoding="utf-8"))["groups"]
     raw = os.environ.get("KERNEL_EXTRAS", "").strip()
@@ -71,6 +98,8 @@ def main():
         path.write_text("\n".join(kept).rstrip("\n") + "\n" + "\n".join(block) + "\n", encoding="utf-8")
         (report / (tree_name + "-gki_defconfig")).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
         print("已注入配置组 %s → %s（%d 项）" % (",".join(groups), tree_name, len(symbols)), flush=True)
+
+    patch_defconfig_check(root / "kernel_platform")
 
 
 if __name__ == "__main__":

@@ -99,6 +99,12 @@ rfkill → cfg80211 → mac80211 → qca_cld3 整链加载失败（WiFi/蓝牙�
 基线（`none`）与原来行为一致：开关为 `none` 时不改动任何 defconfig。
 注入是幂等的，重跑不会让 defconfig 增长或错位。
 
+Kleaf 的 `check_defconfig` 要求 `gki_defconfig` 与 `savedefconfig` 的规范输出逐字节一致，
+而注入项按 Kconfig 菜单顺序重排，必然不满足。因此**只在选定了配置组时**把该校验降级为告警
+（`kernel_platform/build/kernel/_setup_env.sh`），其余构建完整性检查不变；选 `none` 时保持原始校验。
+这一点在 run 45098110397 上暴露过：当时选项其实全部生效（重建配置里能看到 `CONFIG_KPM`、
+`CGROUP_DEVICE`、`NFT_*`），只是文件布局不被接受。
+
 ## KVM 与容器的实测结论
 
 - **KVM 在本机不可用，且不是配置问题**。`gki_defconfig` 里 `CONFIG_KVM=y`，内核已编入；但设备上
